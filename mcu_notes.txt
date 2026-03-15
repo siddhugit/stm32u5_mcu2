@@ -1,0 +1,104 @@
+The architecture layer structure is
+
+[App]->[Stm32_Hal]->[CMSIS Core]->[Hardware i.e. ARM processor and peripherals]
+
+The project directoris are
+--------------------------
+Inc - App includes
+Src - App source files
+Drivers - The Stm32_Hal layer with divers of peripherals
+CMSIS - CMSIS Core from ARM and processor specific peripherals e.g. NVI, systick
+Startup - interrupt names and handlers (interrupt vector table)
+
+Clocks
+HSI - High speed internal (Internal rc oscillator) 16 mhz 
+HSE - High speed external (External crystal based oscillator)
+PLL - Phase locked loop ( for higher speeds like 120 Mhz for peripherals like USB etc )
+
+SystemClock_Config() - configures system clock
+HAL_init() - Flash initialization, Systick init to generate interrupt per 1 ms, system execption/interrupts initialization
+*Msp_init()- Low level initialization e.g. interrupts
+
+
+CAN bus protocol
+-----------------
+CAN speed can go upto 1 Mbits/sec
+Excellet error handling and error confinement
+Reliability by retransmitting the fualty messages
+Automatic disconnection of faulty nodes
+
+CAN is a broadcast kind of messages. All devices can hear the transmission.
+All nodes will pickup the traffic on the bus.
+
+CAN controller has two pins CAT_tx and CAN_Rx
+CAN_Rx and CAT_tx are not used to communicate with other nodes.
+CAN uses differential signal for communication between nodes.
+A CAN tranceiver converts CAN_Rx and CAN_Tx into differential signals (CAN_Hi and CAN_Lo).
+CAN_Hi should be connected to CAN_Hi of the Bus and CAN_Lo to CAN_Lo of the bus.
+
+Logical '0' is dominant state and Logical '1' is reccessive state
+
+CAN Frame formats
+----------------
+Four types of frame
+(1) Data frame - used in user app. Used most commonly.
+start of frame(1-bit) | Arbitration id (12-bit) |  Some control fields | Payload length | payload (Max 8 bytes) | CRC ( used by CAN controller ) | ACK bit ( if 0 then received successfully, otherwise retransmitted) | End of frame bits | 3-bit spacing
+
+Arbitration id (12-bit) - 11-bit Id and 1-bit RTR id(RTR - remote transmission request)
+11-bit Id is priority of a message, higher the value lower the priority
+Extended CAN has 29-bit ID instead of 11-bit id
+2.0A is just standard CAN
+STM32 MCUs support 2.0B CAN which supports both standard as well as extended CAN
+1-bit RTR : If it is 1, then frame is called remote frame and is a request for data from another node. If it is 0, then it is data frame.
+
+Ack - All receivers node acknowledeges the data received correctly, otherwise re-transmitted(If atleast one of them complains error). 
+If intended recipient is not present in the network, ACK does not guarantee that the message is received by the intended recipient, as other nodes are going to acknowledege success. 
+
+7 bits of EOF and 3 bits IFS each with reccessive state indicates IDLE bus ( i.e. 10 consecutive reccessive states ).
+
+(2) Remote frame - It is used to get data from another node. It has no payload. Node A can send a remote frame with an arbiter ID let's say 123, and Node B can respond with the same arbiter ID 123. In other words, it can be used as request/response.
+
+(3)Error frame - Used by CAN controller hardware
+(4)Overload frame - Used by CAN controller hardware
+
+CAN Arbitration
+---------------
+The protocol is
+CSMA - Carrier sense multiple access
+CD - collision detection
+AMP - Arbitration based on priority (Arbiter ID). Higher priority wins bus access.
+Allocation of message priority or arbiter id is upto the application writers/programmers
+
+CAN Features
+-------------
+Configure parameters - bit rate, bit timings etc
+Transmission
+Handle receptions
+Manage interrupts
+Error handling/diagnostics
+
+supported modes
+(1) Silent mode (monitoring mode) - Can't transmit to the bus, can receive from bus, transmitted message is sent back to rx
+(2) loopback mode(External loop-back mode) - Can't receive from the bus, can transmit to the bus, transmitted message is sent back to rx ( used for self test )
+(3) Silent+loopback mode (Internal loop-back mode) - Can't transmit to the bus, can't receive from bus, transmitted message is sent back to rx
+
+CAN bit time calculation
+http://www.bittiming.can-wiki.info/
+
+FDCAN1 is connected to APB1 in stm32u585
+1 time quanta = (APB1 clock speed) / prescaler
+E.g  APB1 clock speed = 160 Mhz and prescaler property of FDCAN is 8, then 1 time quanta is 160/8 = 20 Mhz = 50 ns
+Let's say
+Sync_Seg:	1 tq
+Prop_Seg + Phase_Seg1:	15 tq
+Phase_Seg2: 4 tq
+
+Total time quanta = 20 ( Sync_Seg + Prop_Seg + Phase_Seg1 + Phase_Seg2 = 1 + 15 + 4)
+One-bit = 20 * 50 ns = 1000 ns , Hence 1 second will have 1000000 bits, so 1 Mbits/sec
+
+
+
+
+
+
+
