@@ -23,8 +23,10 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include "301/CO_ODinterface.h"
+#include "301/CO_SDOclient.h"
 #include "OD.h"
 #include "CO_app_STM32.h"
+#include "CANopen.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,6 +36,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+
+#define CAN_BUFFER_LEN          (8)
 #define CONTROLLER_NODE_ID 0x01
 /* USER CODE END PD */
 
@@ -53,7 +58,12 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+
+extern CO_t *CO;
+
 static FDCAN_FilterTypeDef   sFilterConfig;
+
+uint8_t gSdoData[CAN_BUFFER_LEN];
 
 
 
@@ -74,6 +84,87 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+CO_SDO_abortCode_t
+read_SDO(CO_SDOclient_t* SDO_C, uint8_t nodeId, uint16_t index, uint8_t subIndex, uint8_t* buf, size_t bufSize,
+         size_t* readSize) {
+    CO_SDO_return_t SDO_ret;
+
+    // setup client (this can be skipped, if remote device don't change)
+    SDO_ret = CO_SDOclient_setup(SDO_C, CO_CAN_ID_SDO_CLI + nodeId, CO_CAN_ID_SDO_SRV + nodeId, nodeId);
+    if (SDO_ret != CO_SDO_RT_ok_communicationEnd) {
+        return CO_SDO_AB_GENERAL;
+    }
+
+    // initiate upload
+    SDO_ret = CO_SDOclientUploadInitiate(SDO_C, index, subIndex, 1000, false);
+    if (SDO_ret != CO_SDO_RT_ok_communicationEnd) {
+        return CO_SDO_AB_GENERAL;
+    }
+
+    // upload data
+    do {
+        uint32_t timeDifference_us = 10000;
+        CO_SDO_abortCode_t abortCode = CO_SDO_AB_NONE;
+
+        SDO_ret = CO_SDOclientUpload(SDO_C, timeDifference_us, false, &abortCode, NULL, NULL, NULL);
+        if (SDO_ret < 0) {
+            return abortCode;
+        }
+
+        //sleep_us(timeDifference_us);
+        HAL_Delay(timeDifference_us/1000);
+    } while (SDO_ret > 0);
+
+    // copy data to the user buffer (for long data function must be called several times inside the loop)
+    *readSize = CO_SDOclientUploadBufRead(SDO_C, buf, bufSize);
+
+    return CO_SDO_AB_NONE;
+}
+
+
+CO_SDO_abortCode_t
+write_SDO(CO_SDOclient_t* SDO_C, uint8_t nodeId, uint16_t index, uint8_t subIndex, uint8_t* data, size_t dataSize) {
+    CO_SDO_return_t SDO_ret;
+    bool_t bufferPartial = false;
+
+    // setup client (this can be skipped, if remote device is the same)
+    SDO_ret = CO_SDOclient_setup(SDO_C, CO_CAN_ID_SDO_CLI + nodeId, CO_CAN_ID_SDO_SRV + nodeId, nodeId);
+    if (SDO_ret != CO_SDO_RT_ok_communicationEnd) {
+        return -1;
+    }
+
+    // initiate download
+    SDO_ret = CO_SDOclientDownloadInitiate(SDO_C, index, subIndex, dataSize, 1000, false);
+    if (SDO_ret != CO_SDO_RT_ok_communicationEnd) {
+        return -1;
+    }
+
+    // fill data
+    size_t nWritten = CO_SDOclientDownloadBufWrite(SDO_C, data, dataSize);
+    if (nWritten < dataSize) {
+        bufferPartial = true;
+        // If SDO Fifo buffer is too small, data can be refilled in the loop.
+    }
+
+    // download data
+    do {
+        uint32_t timeDifference_us = 10000;
+        CO_SDO_abortCode_t abortCode = CO_SDO_AB_NONE;
+
+        SDO_ret = CO_SDOclientDownload(SDO_C, timeDifference_us, false, bufferPartial, &abortCode, NULL, NULL);
+        if (SDO_ret < 0) {
+            return abortCode;
+        }
+
+        //sleep_us(timeDifference_us);
+        HAL_Delay(timeDifference_us/1000);
+    } while (SDO_ret > 0);
+
+    return CO_SDO_AB_NONE;
+}
+
+
 int __io_putchar(int ch)
 {
     /* Support printf over UART */
@@ -280,6 +371,10 @@ int main(void)
   // my_fdcan1_transmit();
 
   // my_fdcan1_receive();
+  uint8_t tmp = 0x20;
+  size_t readBytes;
+  write_SDO(canOpenNodeSTM32.canOpenStack->SDOclient, 0x10, 0x6000, 0, &tmp, 1 );
+  read_SDO(canOpenNodeSTM32.canOpenStack->SDOclient, 0x10, 0x1000, 0, &gSdoData[0], 4, &readBytes );
 
   while (1)
   {
