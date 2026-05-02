@@ -96,6 +96,32 @@ Phase_Seg2: 4 tq
 Total time quanta = 20 ( Sync_Seg + Prop_Seg + Phase_Seg1 + Phase_Seg2 = 1 + 15 + 4)
 One-bit = 20 * 50 ns = 1000 ns , Hence 1 second will have 1000000 bits, so 1 Mbits/sec
 
+Clocks
+-------
+HCLK, PCLK1, PCLK2 and peripheral clocks are derived from SYSCLK
+HCLK - source for AHB
+PCLK1 - Source for APB1
+PCLK2 - Source for APB2
+FCLK (Cortex clock) - Source for processor, also powered by HCLK
+Cortex system timer - It is the SysTick timer. It is same as HCLK or HCLK/8, depending upon what prescaler is used. The cortex system timer frequecy in Mhz is divided by 1000 get number of ticks in 1ms. This number of ticks is passed to HAL_SYSTICK_Config() to trigger Systick interrupt every 1 millisecond.
+
+HSE uses crystal or ceramic oscillator.
+HSI is usually RC oscillator, which is less reliable especially with temperature fluctuations.
+HSI is good for less power consumption and faster to standup.
+
+LSI or LSE is used for watchdog timers and RTC.
+
+HSE bypass means use some external circuitory to connect to a oscillaator e.g. on a ST-link side of the board
+
+For flash_latency look into reference manual in the flash memory section. Look into wait states table.
+The flash_latency depends on Vref and HCLK.
+
+We can use a timer in input capture mode to measure frequecny of a clock e.g. HSI
+
+PLL
+
+PLL can be used to increase the clock speed given HSI or HSE as clock input. The VCO ( voltage control oscillaator) is the hardware unit that does the PLL task. The PLL uses M divider and N multiplier and then P divider which outputs PLCLK. The PLCLK becomes the source for HCLK. the Q and R dividers are used for some the peripherals too, but those peripherals are us not used much, otherwise you want to specify Q and R divders too.
+
 
 
 
